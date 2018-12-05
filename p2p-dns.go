@@ -90,7 +90,7 @@ func main() {
 
 	// Set a function as stream handler.
 	// This function is called when a peer initiates a connection and starts a stream with this peer.
-	//host.SetStreamHandler(protocol.ID(config.ProtocolID), handleStream)
+	host.SetStreamHandler(protocol.ID(ProtocolID), handleStream)
 
 	// Start a DHT, for use in peer discovery. We can't just make a new DHT client
 	// because we want each peer to maintain its own local copy of the DHT, so
@@ -186,12 +186,12 @@ var log = logging.Logger("rendezvous")
 
 func handleStream(stream inet.Stream) {
 	log.Info("Got a new stream!")
-
+	fmt.Println("Got a new stream!")
 	// Create a buffer stream for non blocking read and write.
-	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+	//rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
-	go readData(rw)
-	go writeData(rw)
+	//go readData(rw)
+	//go writeData(rw)
 
 	// 'stream' will stay open until you close it (or the other side closes it).
 }
