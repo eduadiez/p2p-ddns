@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/btcsuite/btcd/btcec"
 	"github.com/ethereum/go-ethereum/crypto/sha3"
 	iaddr "github.com/ipfs/go-ipfs-addr"
 	logging "github.com/ipfs/go-log"
@@ -39,18 +40,18 @@ type Account struct {
 	PrvKey  string `json:"prvKey"`
 }
 
+var prvKey crypto.PrivKey
+var pubKey crypto.PubKey
+
+var acc Account
+
 func main() {
 
 	sourcePort := 20202
-	RendezvousString := "Hi!!"
+	RendezvousString := "b27064cf58dc75192e5b94a2495f0f718c4c1518e0e8a8cca3ee17bcf803d6ad"
 	ProtocolID := "/chat/1.1.0"
 
 	ctx := context.Background()
-
-	var prvKey crypto.PrivKey
-	var pubKey crypto.PubKey
-
-	var acc Account
 
 	filedata, err := ioutil.ReadFile("key.txt")
 	if err != nil {
@@ -62,6 +63,7 @@ func main() {
 		JSONaccount, _ := json.Marshal(acc)
 		fmt.Printf("%+v", string(JSONaccount))
 		writeKeyFile("key.txt", JSONaccount)
+
 	} else {
 		json.Unmarshal(filedata, &acc)
 		pk, _ := hex.DecodeString(acc.PrvKey)
@@ -154,7 +156,45 @@ func main() {
 				//go writeData(rw)
 				go readData(rw)
 
-				_, err = rw.WriteString(fmt.Sprintf("%s\n", "Hey!! I need your IP!"))
+				/*
+					pr, _ := pubKey.Raw()
+					p, err := btcec.ParsePubKey(pr, btcec.S256())
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+
+					// Encrypt a message decryptable by the private key corresponding to pubKey
+					ciphertext, err := btcec.Encrypt(p, []byte("Hey!! I need your IP!"))
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+
+					_, err = rw.WriteString(string(ciphertext))
+				*/
+
+				// Decode the hex-encoded pubkey of the recipient.
+				pubKeyBytes, err := hex.DecodeString(RendezvousString) // uncompressed pubkey
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+				pubKey, err := btcec.ParsePubKey(pubKeyBytes, btcec.S256())
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+
+				// Encrypt a message decryptable by the private key corresponding to pubKey
+				ciphertext, err := btcec.Encrypt(pubKey, []byte("Hey!! I need your IP!"))
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+
+				_, err = rw.WriteString(string(ciphertext))
+
 				if err != nil {
 					fmt.Println("Error writing to buffer")
 					panic(err)
@@ -187,10 +227,11 @@ var log = logging.Logger("rendezvous")
 func handleStream(stream inet.Stream) {
 	log.Info("Got a new stream!")
 	fmt.Println("Got a new stream!")
-	// Create a buffer stream for non blocking read and write.
-	//rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
 
-	//go readData(rw)
+	// Create a buffer stream for non blocking read and write.
+	rw := bufio.NewReadWriter(bufio.NewReader(stream), bufio.NewWriter(stream))
+
+	go readData(rw)
 	//go writeData(rw)
 
 	// 'stream' will stay open until you close it (or the other side closes it).
@@ -199,6 +240,20 @@ func handleStream(stream inet.Stream) {
 func readData(rw *bufio.ReadWriter) {
 	for {
 		str, err := rw.ReadString('\n')
+		fmt.Println(string(str))
+
+		pkBytes, err := prvKey.Raw()
+		privKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), pkBytes)
+
+		// Try decrypting and verify if it's the same message.
+		plaintext, err := btcec.Decrypt(privKey, []byte(str))
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		fmt.Println(string(plaintext))
+
 		if err != nil {
 			fmt.Println("Error reading from buffer")
 			//panic(err)
