@@ -45,12 +45,12 @@ var prvKey crypto.PrivKey
 var pubKey crypto.PubKey
 
 var acc Account
-var rendezvousString string
+var rendezvousString *string
 
 func main() {
 
 	var server = flag.Bool("server", false, "server")
-	rendezvousString = *flag.String("rendezvous", "02aca726bc0f188b7a26a3ab843529ff1f4471b3989cfa5950ba848262d7dc0fe4", "rendezvous")
+	rendezvousString = flag.String("rendezvous", "02aca726bc0f188b7a26a3ab843529ff1f4471b3989cfa5950ba848262d7dc0fe4", "rendezvous")
 	flag.Parse()
 
 	sourcePort := 20202
@@ -76,13 +76,13 @@ func main() {
 	}
 
 	if *server {
-		rendezvousString = acc.PubKey
+		rendezvousString = &acc.PubKey
 	}
 
 	fmt.Printf("Account: 0x%s\n", acc.Address)
 	fmt.Printf("Public key: %s\n", acc.PubKey)
 	fmt.Printf("Private Key: %s\n", acc.PrvKey)
-	fmt.Printf("Rendezvous: %s\n", rendezvousString)
+	fmt.Printf("Rendezvous: %s\n", *rendezvousString)
 
 	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", sourcePort))
 	options := []libp2p.Option{
@@ -135,13 +135,13 @@ func main() {
 	// This is like telling your friends to meet you at the Eiffel Tower.
 	fmt.Println("Announcing ourselves...")
 	routingDiscovery := discovery.NewRoutingDiscovery(kademliaDHT)
-	discovery.Advertise(ctx, routingDiscovery, rendezvousString)
+	discovery.Advertise(ctx, routingDiscovery, *rendezvousString)
 	fmt.Println("Successfully announced!")
 
 	// Now, look for others who have announced
 	// This is like your friend telling you the location to meet you.
 	fmt.Println("Searching for other peers...")
-	peerChan, err := routingDiscovery.FindPeers(ctx, rendezvousString)
+	peerChan, err := routingDiscovery.FindPeers(ctx, *rendezvousString)
 	if err != nil {
 		panic(err)
 	}
@@ -185,7 +185,7 @@ func main() {
 
 				if !*server {
 					// Decode the hex-encoded pubkey of the recipient.
-					pubKeyBytes, err := hex.DecodeString(rendezvousString) // uncompressed pubkey
+					pubKeyBytes, err := hex.DecodeString(*rendezvousString) // uncompressed pubkey
 					if err != nil {
 						fmt.Println(err)
 						return
