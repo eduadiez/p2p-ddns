@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -44,11 +45,15 @@ var prvKey crypto.PrivKey
 var pubKey crypto.PubKey
 
 var acc Account
+var rendezvousString string
 
 func main() {
 
+	var server = flag.Bool("server", false, "server")
+	rendezvousString = *flag.String("rendezvous", "02aca726bc0f188b7a26a3ab843529ff1f4471b3989cfa5950ba848262d7dc0fe4", "rendezvous")
+	flag.Parse()
+
 	sourcePort := 20202
-	RendezvousString := "b27064cf58dc75192e5b94a2495f0f718c4c1518e0e8a8cca3ee17bcf803d6ad"
 	ProtocolID := "/chat/1.1.0"
 
 	ctx := context.Background()
@@ -63,7 +68,6 @@ func main() {
 		JSONaccount, _ := json.Marshal(acc)
 		fmt.Printf("%+v", string(JSONaccount))
 		writeKeyFile("key.txt", JSONaccount)
-
 	} else {
 		json.Unmarshal(filedata, &acc)
 		pk, _ := hex.DecodeString(acc.PrvKey)
@@ -71,9 +75,14 @@ func main() {
 		pubKey = prvKey.GetPublic()
 	}
 
+	if *server {
+		rendezvousString = acc.PubKey
+	}
+
 	fmt.Printf("Account: 0x%s\n", acc.Address)
-	fmt.Printf("Public key: %s\n", acc.PrvKey)
+	fmt.Printf("Public key: %s\n", acc.PubKey)
 	fmt.Printf("Private Key: %s\n", acc.PrvKey)
+	fmt.Printf("Rendezvous: %s\n", rendezvousString)
 
 	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", sourcePort))
 	options := []libp2p.Option{
@@ -126,13 +135,13 @@ func main() {
 	// This is like telling your friends to meet you at the Eiffel Tower.
 	fmt.Println("Announcing ourselves...")
 	routingDiscovery := discovery.NewRoutingDiscovery(kademliaDHT)
-	discovery.Advertise(ctx, routingDiscovery, RendezvousString)
+	discovery.Advertise(ctx, routingDiscovery, rendezvousString)
 	fmt.Println("Successfully announced!")
 
 	// Now, look for others who have announced
 	// This is like your friend telling you the location to meet you.
 	fmt.Println("Searching for other peers...")
-	peerChan, err := routingDiscovery.FindPeers(ctx, RendezvousString)
+	peerChan, err := routingDiscovery.FindPeers(ctx, rendezvousString)
 	if err != nil {
 		panic(err)
 	}
@@ -174,26 +183,31 @@ func main() {
 					_, err = rw.WriteString(string(ciphertext))
 				*/
 
-				// Decode the hex-encoded pubkey of the recipient.
-				pubKeyBytes, err := hex.DecodeString(RendezvousString) // uncompressed pubkey
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-				pubKey, err := btcec.ParsePubKey(pubKeyBytes, btcec.S256())
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
+				if !*server {
+					// Decode the hex-encoded pubkey of the recipient.
+					pubKeyBytes, err := hex.DecodeString(rendezvousString) // uncompressed pubkey
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+					pubKey, err := btcec.ParsePubKey(pubKeyBytes, btcec.S256())
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
 
-				// Encrypt a message decryptable by the private key corresponding to pubKey
-				ciphertext, err := btcec.Encrypt(pubKey, []byte("Hey!! I need your IP!"))
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
+					// Encrypt a message decryptable by the private key corresponding to pubKey
+					ciphertext, err := btcec.Encrypt(pubKey, []byte("Hey!! I need your IP!"))
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
 
-				_, err = rw.WriteString(string(ciphertext))
+					fmt.Println(string(ciphertext))
+					_, err = rw.WriteString(string(ciphertext))
+				} else {
+					_, err = rw.WriteString(string("Hi!!!!!!"))
+				}
 
 				if err != nil {
 					fmt.Println("Error writing to buffer")
